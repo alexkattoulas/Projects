@@ -1,0 +1,25 @@
+import math as m 
+import numpy as np
+
+dia = 200
+r = 100
+A = 200**2
+
+rng = np.random.default_rng()
+inside_C = 0
+outside_C = 0
+for i in range(10000):
+    x = rng.uniform(0,200)
+    y = rng.uniform(0,200)
+    if (x-100)**2 + (y-100)**2 <= 10000:
+        inside_C = inside_C + 1
+    else:
+        outside_C = outside_C + 1
+total = inside_C + outside_C
+circle_ratio = inside_C / total
+
+A_C = A * circle_ratio
+pi_est = A_C / r**2
+
+print(f"circle ratio", circle_ratio)
+print(f"Pi estimate:", pi_est)
