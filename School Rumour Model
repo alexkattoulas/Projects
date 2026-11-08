@@ -1,0 +1,118 @@
+import numpy as np
+import pandas as pd 
+import statistics as s
+import matplotlib as mpl
+from numpy import random 
+import math
+np.set_printoptions(suppress=True, precision=1)
+MC_runs = 200
+
+def rumour_traits():
+    rng = np.random.default_rng()
+    meanJS = [0.5, 0.5]
+    cov = [[0.0625, 0.005],
+           [0.005,  0.01]]
+    sampleRumours = rng.multivariate_normal(meanJS, cov) 
+    while (sampleRumours>1).any() or (sampleRumours<=0).any():
+        sampleRumours = rng.multivariate_normal(meanJS, cov) 
+    return sampleRumours
+
+def student_traits():
+    rng = np.random.default_rng()
+    meanCDTP = [0.5, 0.05, 0.1, 0.5]
+    cov = [[0.0625,  -0.00375,  0.0025,   0.025  ],
+           [-0.00375, 0.0025,  -0.00025,  0.001  ],
+           [0.0025,  -0.00025,  0.000625, 0.0015 ],
+           [0.025,    0.001,    0.0015,   0.04   ]]
+    sampleStudents = rng.multivariate_normal(meanCDTP, cov) 
+    while (sampleStudents>1).any() or (sampleStudents<0).any():
+        sampleStudents = rng.multivariate_normal(meanCDTP, cov)        
+    return sampleStudents
+
+def p_tell(chattiness, distortion, popularity, juice, simplicity, awareness):
+    prob = awareness * ((chattiness + popularity + juice + simplicity - distortion) / 4) 
+    return prob
+    
+def student_awareness_teller():
+    student = student_traits()
+    chattiness, distortion, decay, popularity = student
+    rumour = rumour_traits()
+    juice, simplicity = rumour 
+    rng = np.random.default_rng()
+    for t in range(100):
+        awareness = (1 - (decay))**t
+        if awareness < 0.05:
+            awareness = 0.0001
+        p =  p_tell(chattiness, distortion, popularity, juice, simplicity, awareness)
+        if rng.random() <= p and awareness > 0.05:
+            print(t, "tell")
+        else:
+            print(t, "not telling")
+    return
+
+def student_awareness_told(awareness, saturation):
+    if not saturation:
+        return 1
+    else:
+        return min(awareness+0.5, 1)
+
+def run_school():
+    school_sample = []
+    rng = np.random.default_rng()
+    for _ in range(500):
+        school_sample.append(student_traits())
+    school_traits = np.array(school_sample)
+    awareness_all = np.zeros(500)
+    awareness_all[0] = 1
+    awareness_all[1] = 1
+    chattiness = school_traits[:,0]
+    distortion = school_traits[:,1]
+    decay = school_traits[:,2]
+    popularity = school_traits[:,3]
+    info = rumour_traits()
+    juice, simplicity = info
+    saturated = False
+    saturation_step = None
+    tell_count = np.zeros(500)
+    p_full = p_tell(chattiness, distortion, popularity, juice, simplicity, np.ones(500))
+    R_each = p_full / decay
+    R = R_each.mean()
+    for t in range(100):
+        rolls = rng.random(500)
+        awareness_all = awareness_all * (1 - (decay))
+        awareness_all = np.where((awareness_all > 0) & (awareness_all < 0.05), 0.0001, awareness_all)
+        p_all = p_tell(chattiness, distortion, popularity, juice, simplicity, awareness_all)
+        tellers = (rolls < p_all) & (awareness_all >= 0.05)
+        tellers_id = np.flatnonzero(tellers)
+        tell_count = tell_count + tellers
+        listeners_id = rng.integers(0, 500, size = len(tellers_id))
+        for listener in listeners_id:
+            awareness_all[listener] = student_awareness_told(awareness_all[listener], saturated)
+        if not saturated and ((awareness_all) > 0).all():
+            saturated = True
+            saturation_step = t
+    measured_R = tell_count[awareness_all > 0].mean()
+    return {
+            "saturated": saturated,
+            "saturation steps": saturation_step,
+            "juice": juice,
+            "simplicity": simplicity,
+            "final_reach": (awareness_all > 0).sum(),
+            "total tellings per student through 100 days": measured_R,
+            "expected total tellings in one stretch of remembering": R
+    }
+print(run_school())
+            
+def MC():
+    results = []
+    for i in range(MC_runs):
+        results.append(run_school())
+    return results
+
+results = MC()
+print(len(results))
+df = pd.DataFrame(results)
+print(df)
+print(df.describe())
+print(df["total tellings per student through 100 days"].mean())
+print(df["expected total tellings in one stretch of remembering"].mean())
